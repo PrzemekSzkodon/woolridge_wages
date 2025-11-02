@@ -1,0 +1,17 @@
+name: econometrics
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy>=1.24.0
+  - pandas>=2.0.0
+  - matplotlib>=3.7.0
+  - scipy>=1.10.0
+  - statsmodels>=0.14.0
+  - requests>=2.28.0
+  - pip
+  - pip:
+    - pyreadr>=0.4.0
+    - polars>=0.19.0
+
