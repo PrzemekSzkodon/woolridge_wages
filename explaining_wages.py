@@ -39,6 +39,7 @@ GAUSS-MARKOV ASSUMPTIONS:
 """
 
 from scipy import stats as scipy_stats
+from scipy.stats import chi2
 
 fig1, axes1 = plt.subplots(2, 3, figsize=(16, 10))
 fig1.suptitle('Gauss-Markov Assumptions Diagnostics', fontsize=16, fontweight='bold')
@@ -306,44 +307,76 @@ ax5.text(0.05, 0.95,
          transform=ax5.transAxes, fontsize=9, verticalalignment='top',
          bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-# 6. Solutions Summary
+# 6. White Test for Heteroscedasticity
 """
-SOLUTIONS TO HETEROSCEDASTICITY:
-1. Robust SE (HC3): Corrects inference, doesn't improve efficiency
-2. WLS: More efficient if variance structure known
-3. Log transformation: Can stabilize variance
-4. GLS: Generalized least squares (most efficient)
+WHITE TEST: More general test than Breusch-Pagan
+Regresses squared residuals on X, X², X³, and cross products
+H₀: Homoscedasticity
+H₁: Heteroscedasticity (any form)
+Test statistic: nR² ~ χ²(k) where k = number of regressors in White regression
 """
 ax6 = axes2[1, 2]
-solutions_text = f"""
-HETEROSCEDASTICITY SOLUTIONS:
+# Prepare data for White test (up to cubic terms)
+white_data = pd.DataFrame({
+    'resid_sq': residual_values ** 2,
+    'educ': df_wage1_voi['educ'],
+    'tenure': df_wage1_voi['tenure'],
+    'educ_sq': df_wage1_voi['educ'] ** 2,
+    'tenure_sq': df_wage1_voi['tenure'] ** 2,
+    'educ_tenure': df_wage1_voi['educ'] * df_wage1_voi['tenure'],
+    'educ_cub': df_wage1_voi['educ'] ** 3,
+    'tenure_cub': df_wage1_voi['tenure'] ** 3,
+    'educ_sq_tenure': df_wage1_voi['educ'] ** 2 * df_wage1_voi['tenure'],
+    'educ_tenure_sq': df_wage1_voi['educ'] * df_wage1_voi['tenure'] ** 2
+})
 
-1. ROBUST SE (HC3)
-   • Keeps OLS coefficients
-   • Adjusts standard errors
-   • Valid inference
+# Run White test regression
+white_model = smf.ols('resid_sq ~ educ + tenure + educ_sq + tenure_sq + educ_tenure + '
+                     'educ_cub + tenure_cub + educ_sq_tenure + educ_tenure_sq', 
+                     data=white_data).fit()
 
-2. WEIGHTED LEAST SQUARES (WLS)
-   • More efficient
-   • Requires known variance structure
-   • Better if hetero form known
+# White test statistic: n * R²
+n = len(residual_values)
+white_stat = n * white_model.rsquared
+df_white = len(white_model.params) - 1  # Degrees of freedom (number of regressors)
+white_pvalue = 1 - chi2.cdf(white_stat, df_white)
 
-3. LOG TRANSFORMATIONS
-   • Stabilizes variance
-   • Changes interpretation
-   • May reduce heteroscedasticity
+# Display results
+test_result_white = 'Heteroscedasticity\nDetected' if white_pvalue < 0.05 else 'Homoscedasticity\nHolds'
+color_result_white = 'red' if white_pvalue < 0.05 else 'green'
 
-4. GENERALIZED LEAST SQUARES (GLS)
-   • Most efficient
-   • Requires full variance matrix
-   • Best if structure known
-"""
-ax6.text(0.5, 0.95, solutions_text, ha='center', va='top',
-         fontsize=10, transform=ax6.transAxes,
-         bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.8),
+ax6.text(0.5, 0.92, 'WHITE TEST', ha='center', va='center',
+         fontsize=14, fontweight='bold', transform=ax6.transAxes)
+ax6.text(0.5, 0.78, f'n×R² = {white_stat:.4f}', ha='center', va='center',
+         fontsize=11, transform=ax6.transAxes)
+ax6.text(0.5, 0.68, f'p-value = {white_pvalue:.4f}', ha='center', va='center',
+         fontsize=11, fontweight='bold', transform=ax6.transAxes)
+ax6.text(0.5, 0.55, test_result_white, ha='center', va='center',
+         fontsize=12, fontweight='bold', color=color_result_white, transform=ax6.transAxes)
+
+# Display coefficients for each power
+coeff_text = "COEFFICIENTS:\n"
+coeff_text += f"educ:      {white_model.params['educ']:8.4f}\n"
+coeff_text += f"tenure:    {white_model.params['tenure']:8.4f}\n"
+coeff_text += f"educ²:     {white_model.params['educ_sq']:8.4f}\n"
+coeff_text += f"tenure²:   {white_model.params['tenure_sq']:8.4f}\n"
+coeff_text += f"educ×ten:  {white_model.params['educ_tenure']:8.4f}\n"
+coeff_text += f"educ³:     {white_model.params['educ_cub']:8.4f}\n"
+coeff_text += f"tenure³:   {white_model.params['tenure_cub']:8.4f}\n"
+coeff_text += f"educ²×ten: {white_model.params['educ_sq_tenure']:8.4f}\n"
+coeff_text += f"educ×ten²: {white_model.params['educ_tenure_sq']:8.4f}"
+
+ax6.text(0.5, 0.30, coeff_text, ha='center', va='top',
+         fontsize=8, transform=ax6.transAxes,
+         bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.7),
          family='monospace')
+
+ax6.text(0.5, 0.02, f'df = {df_white}, H₀: Homoscedasticity', ha='center', va='bottom',
+         fontsize=9, transform=ax6.transAxes)
+ax6.set_xlim(0, 1)
+ax6.set_ylim(0, 1)
 ax6.axis('off')
-ax6.set_title('Solutions to Heteroscedasticity', fontweight='bold')
+ax6.set_title('White Test (Cubic Terms)', fontweight='bold')
 
 plt.tight_layout()
 plt.show()
@@ -356,6 +389,23 @@ print(f"Correlation (Residuals, Educ):   {corr_educ:.6f}")
 print(f"Correlation (Residuals, Tenure): {corr_tenure:.6f}")
 print(f"Breusch-Pagan Test p-value:      {bp_pvalue:.4f}")
 print(f"Interpretation: {'⚠ Heteroscedasticity detected' if bp_pvalue < 0.05 else '✓ Homoscedasticity holds'}")
+print("\n" + "="*60)
+print("WHITE TEST DETAILS")
+print("="*60)
+print(f"White Test Statistic (n×R²):     {white_stat:.4f}")
+print(f"White Test p-value:              {white_pvalue:.4f}")
+print(f"Degrees of freedom:              {df_white}")
+print(f"Interpretation: {'⚠ Heteroscedasticity detected' if white_pvalue < 0.05 else '✓ Homoscedasticity holds'}")
+print("\nWhite Test Coefficients (regressing squared residuals):")
+print(f"  educ:         {white_model.params['educ']:10.6f}")
+print(f"  tenure:       {white_model.params['tenure']:10.6f}")
+print(f"  educ²:         {white_model.params['educ_sq']:10.6f}")
+print(f"  tenure²:       {white_model.params['tenure_sq']:10.6f}")
+print(f"  educ×tenure:   {white_model.params['educ_tenure']:10.6f}")
+print(f"  educ³:         {white_model.params['educ_cub']:10.6f}")
+print(f"  tenure³:       {white_model.params['tenure_cub']:10.6f}")
+print(f"  educ²×tenure:  {white_model.params['educ_sq_tenure']:10.6f}")
+print(f"  educ×tenure²:   {white_model.params['educ_tenure_sq']:10.6f}")
 print("="*60)
 
 # ============================================================================
