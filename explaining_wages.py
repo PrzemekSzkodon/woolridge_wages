@@ -647,6 +647,8 @@ else:
     print("   ✓ Homoscedasticity → Standard OLS is appropriate")
 print("="*80)
 
-
+"""
+Completed
+"""
 
 
